@@ -1,0 +1,24 @@
+{
+  "horizon_days": 180,
+  "warmup_days": 30,
+  "shelf_life_days": 7,
+  "lead_time_days": 1,
+  "demand_model": {
+    "type": "poisson_drift",
+    "lambda_start": 20.0,
+    "lambda_end": 28.0
+  },
+  "costs": {
+    "waste_cost": 1.0,
+    "stockout_cost": 3.0,
+    "holding_cost": 0.05
+  },
+  "policy": {
+    "name": "cq_base_stock",
+    "service_level_target": 0.95,
+    "history_window": 28,
+    "ewma_alpha": 0.2,
+    "residual_window": 60
+  }
+}
+

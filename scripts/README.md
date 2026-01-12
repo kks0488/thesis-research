@@ -1,0 +1,38 @@
+# Scripts
+
+## new_topic.py
+
+새 토픽 폴더와 기본 문서를 생성합니다.
+
+예:
+
+- `python3 scripts/new_topic.py "미래먹거리: 정밀발효 기반 단백질"`
+
+## openalex_search.py
+
+OpenAlex에서 검색어로 works 메타데이터를 가져와 `literature/library.jsonl`에 누적합니다.
+
+예:
+
+- `python3 scripts/openalex_search.py --query "precision fermentation protein" --per-page 25 --pages 2`
+
+## arxiv_search.py
+
+arXiv에서 검색어로 최신 preprint 메타데이터를 가져와 `literature/library.jsonl`에 누적합니다.
+
+예:
+
+- `python3 scripts/arxiv_search.py --query "cellular agriculture" --max-results 50`
+
+## research_pipeline.py
+
+OpenAlex/arXiv에서 자료를 가져오고, DeepSeek로 “토픽 브리프(읽기 우선순위/클레임/가설/실험/2주 계획)”를 생성해 토픽 폴더에 저장합니다.
+
+사전 준비:
+
+- 환경변수 `DEEPSEEK_API_KEY` 설정
+- 모델은 기본 `DEEPSEEK_MODEL=DeepSeek-V3.2-Speciale` (필요 시 변경)
+
+예:
+
+- `python3 scripts/research_pipeline.py --topic topics/001-미래먹거리정밀발효기반단백질 --query "precision fermentation protein"`

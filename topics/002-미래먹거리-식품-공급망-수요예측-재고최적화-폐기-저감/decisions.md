@@ -1,0 +1,3 @@
+# Decisions
+
+- YYYY-MM-DD: ...
