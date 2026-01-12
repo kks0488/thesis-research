@@ -2,21 +2,21 @@
 
 ## Thesis (1 sentence)
 
-엔터프라이즈 코드베이스에서 PR 자동 생성의 병목은 “코드 생성”이 아니라 “머지 가능성(검증/정책/리스크)”이며, 이를 올리는 시스템(루프+게이트)을 제안한다.
+In enterprise codebases, the bottleneck for automatic PR generation is not code synthesis but mergeability (verification/policy/risk). We propose a loop + gate system to raise mergeability.
 
 ## Objective (autopilot)
 
-- AI가 AI/LLM/소프트웨어공학 논문을 지속적으로 탐색하고, “머지 가능한 PR 비율”을 높이는 **다음 방향**을 제안한다.
-- LangGraph로 파이프라인을 오케스트레이션하고, AI-Scientist-v2로 아이디어 생성을 보조한다.
+- Continuously explore AI/LLM/software engineering papers and propose **next directions** to increase "mergeable PR rate".
+- Orchestrate the pipeline with LangGraph and assist ideation with AI-Scientist-v2 (compat mode by default).
 
 ## Problem
 
-- 입력: Issue(요구사항/버그) + Repo + CI/정책
-- 출력: 머지 가능한 PR(필수 체크 통과) 또는 “왜 불가능한지” 리포트(다음 액션 포함)
+- Input: issue (feature/bug) + repo + CI/policy
+- Output: a mergeable PR (passes required checks) or a report on why it is not mergeable (with next actions)
 
 ## Success Metric (primary)
 
-- `mergeable_pr_rate`: (필수 체크 통과 + 머지 가능한 상태의 PR) / 전체 시도
+- `mergeable_pr_rate`: (PRs that pass required checks and are mergeable) / total attempts
 
 ## Default “Mergeable” Policy (v0)
 
@@ -28,21 +28,21 @@
 
 ## System Design (v0)
 
-1. Context Builder: repo 구조 + 변경영향 + 소유권(CODEOWNERS) + 최근 CI 실패 패턴을 요약
-2. Patch Planner: 최소 변경 계획 + 체크리스트 생성
-3. Verifier Loop: 테스트/린트 실행 → 실패 분류 → 수정 → 재검증
-4. Mergeability Gate: 정책을 충족할 때만 PR 생성, 아니면 실패 리포트 생성
+1. Context Builder: summarize repo structure, change impact, ownership (CODEOWNERS), and recent CI failures
+2. Patch Planner: minimal-change plan + checklist
+3. Verifier Loop: run tests/lint -> classify failures -> fix -> re-verify
+4. Mergeability Gate: open PR only when policy passes, otherwise emit a failure report
 
 ## Evaluation Plan
 
 - Baselines:
-  - B0: 단발 PR 생성(검증 없음)
-  - B1: PR 생성 + 테스트 1회
-  - Ours: 루프 + 게이트
+  - B0: single-shot PR generation (no verification)
+  - B1: PR generation + one test run
+  - Ours: loop + gate
 - Datasets:
-  - 공개 벤치(가능하면 SWE-bench 계열)
-  - 공개 레포 샘플(언어/빌드 다양) + “작은 이슈” 세트
+  - Public benchmark (SWE-bench family if possible)
+  - Sample public repos (varied languages/builds) + a "small issue" set
 - Reporting:
   - `mergeable_pr_rate` (primary)
-  - 실패 유형 분포(CI/의존성/포맷/테스트/정책)
-  - 비용/시간 트레이드오프
+  - failure type distribution (CI/deps/format/test/policy)
+  - cost/time trade-offs

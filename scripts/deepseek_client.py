@@ -23,12 +23,25 @@ class DeepSeekConfig:
     timeout_s: int = 60
 
 
+MODEL_ALIASES = {
+    "deepseek-v3.2-speciale": "deepseek-chat",
+    "deepseek-v3-2-speciale": "deepseek-chat",
+}
+
+
+def normalize_model(model: str) -> str:
+    raw = model.strip()
+    if not raw:
+        return raw
+    return MODEL_ALIASES.get(raw.lower(), raw)
+
+
 def load_config_from_env() -> DeepSeekConfig:
     api_key = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
     if not api_key:
         raise DeepSeekError("Missing DEEPSEEK_API_KEY env var.")
 
-    model = (os.getenv("DEEPSEEK_MODEL") or "DeepSeek-V3.2-Speciale").strip()
+    model = normalize_model((os.getenv("DEEPSEEK_MODEL") or "DeepSeek-V3.2-Speciale").strip())
     allow_override = (os.getenv("DEEPSEEK_ALLOW_OVERRIDE") or "").strip() == "1"
 
     base_url = "https://api.deepseek.com"

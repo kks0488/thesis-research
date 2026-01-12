@@ -1,8 +1,7 @@
 # Literature Library
 
-이 폴더는 검색 결과(논문 메타데이터)와 출처/쿼리를 관리합니다.
+This folder tracks search results (paper metadata) and sources/queries.
 
-- `library.jsonl`: 스크립트가 누적 저장하는 메타데이터(기본 출력)
-- `queries.md`: 사용한 검색 쿼리 기록
-- `sources.md`: 출처(사이트/리포지토리)와 접근 방법
-
+- `library.jsonl`: metadata appended by scripts (default output)
+- `queries.md`: record of search queries
+- `sources.md`: sources (sites/repos) and access notes

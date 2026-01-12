@@ -1,6 +1,5 @@
 # Paper
 
-기본 LaTeX 원고 스켈레톤입니다.
+LaTeX skeleton for the final manuscript.
 
-- 빌드(로컬 LaTeX 필요): `make`
-
+- Build (requires local LaTeX): `make`

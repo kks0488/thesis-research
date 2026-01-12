@@ -1,4 +1,4 @@
-# 미래먹거리: 정밀발효 기반 단백질
+# Future revenue: precision fermentation protein
 
 ## Problem statement (1 sentence)
 
