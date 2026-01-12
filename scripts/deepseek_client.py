@@ -107,25 +107,35 @@ def chat_completion(
 ) -> str:
     url = f"{config.base_url}{config.api_path}"
     headers = {"Authorization": f"Bearer {config.api_key}", "User-Agent": "thesis-research/0.1"}
-    payload = {
+    payload_base = {
         "model": config.model,
         "messages": list(messages),
         "temperature": float(temperature),
-        "max_tokens": int(max_tokens),
         "stream": False,
     }
 
     last_err: Exception | None = None
+    current_max_tokens = max(1, int(max_tokens))
     for attempt in range(retries + 1):
         try:
+            payload = {**payload_base, "max_tokens": current_max_tokens}
             data = _post_json(url, headers=headers, payload=payload, timeout_s=config.timeout_s)
             choices = data.get("choices") or []
             if not choices:
                 raise DeepSeekError(f"Empty choices: {data!r}")
-            msg = (choices[0].get("message") or {}).get("content")
-            if not isinstance(msg, str) or not msg.strip():
-                raise DeepSeekError(f"Empty content: {data!r}")
-            return msg
+            choice = choices[0] or {}
+            message = choice.get("message") or {}
+            content = message.get("content")
+            reasoning = message.get("reasoning_content")
+            finish_reason = choice.get("finish_reason")
+            if isinstance(content, str) and content.strip():
+                return content
+            if reasoning and finish_reason == "length" and attempt < retries:
+                current_max_tokens = min(max(256, current_max_tokens * 2), 4096)
+                continue
+            if reasoning:
+                raise DeepSeekError("Empty content from deepseek-reasoner; increase max_tokens or use deepseek-chat.")
+            raise DeepSeekError(f"Empty content: {data!r}")
         except urllib.error.HTTPError as e:
             last_err = e
             try:
