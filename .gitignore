@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 .env
 .env.*
+state/
 
 literature/*.csv
 literature/*.jsonl

@@ -6,6 +6,7 @@ AI를 “연구팀”처럼 운영하기 위한 작업공간입니다. 여기서
 
 - B2B SaaS / 개발툴(엔터프라이즈 플랫폼팀): “머지 가능한 PR 생성(mergeable PR rate)”을 올리는 검증 중심 에이전트
   - `topics/003-enterprise-mergeable-pr-agent/`
+  - 로컬 autopilot(지속 실행): `scripts/autopilot.py` + `state/`(로컬 상태 저장)
 
 ## 빠른 시작
 
@@ -18,6 +19,10 @@ AI를 “연구팀”처럼 운영하기 위한 작업공간입니다. 여기서
   - arXiv: `python3 scripts/arxiv_search.py --query "cellular agriculture" --max-results 50`
 - 검색 + 요약(DeepSeek로 토픽 브리프 생성):
   - `python3 scripts/research_pipeline.py --topic topics/001-미래먹거리정밀발효기반단백질 --query "precision fermentation protein"`
+- 지속 실행(로컬, systemd 유저 타이머):
+  - 1) `.env` 준비: `cp .env.example .env` 후 `DEEPSEEK_API_KEY` 설정
+  - 2) 설치/시작: `bash scripts/install_autopilot_systemd_user.sh`
+  - 3) 상태 확인: `systemctl --user status thesis-research-autopilot.timer`
 - 논문 요약 템플릿: `templates/paper_summary.md`
 - 논문(LaTeX) 빌드(선택): `cd paper && make` (로컬에 `latexmk`/LaTeX 필요)
 
