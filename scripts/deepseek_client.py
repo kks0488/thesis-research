@@ -24,8 +24,8 @@ class DeepSeekConfig:
 
 
 MODEL_ALIASES = {
-    "deepseek-v3.2-speciale": "deepseek-chat",
-    "deepseek-v3-2-speciale": "deepseek-chat",
+    "deepseek-v3.2-speciale": "deepseek-reasoner",
+    "deepseek-v3-2-speciale": "deepseek-reasoner",
 }
 
 
@@ -41,7 +41,7 @@ def load_config_from_env() -> DeepSeekConfig:
     if not api_key:
         raise DeepSeekError("Missing DEEPSEEK_API_KEY env var.")
 
-    model = normalize_model((os.getenv("DEEPSEEK_MODEL") or "DeepSeek-V3.2-Speciale").strip())
+    model = normalize_model((os.getenv("DEEPSEEK_MODEL") or "deepseek-reasoner").strip())
     allow_override = (os.getenv("DEEPSEEK_ALLOW_OVERRIDE") or "").strip() == "1"
 
     base_url = "https://api.deepseek.com"

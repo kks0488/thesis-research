@@ -38,7 +38,7 @@ AI-Scientist runs in a separate environment (often GPU/conda).
 - 1) Clone: `git clone https://github.com/SakanaAI/AI-Scientist-v2 third_party/AI-Scientist-v2`
 - 2) Env vars:
   - `export AI_SCIENTIST_HOME=/path/to/third_party/AI-Scientist-v2`
-  - `export AI_SCIENTIST_MODEL=DeepSeek-V3.2-Speciale` (compat mode, deepseek-chat alias)
+  - `export AI_SCIENTIST_MODEL=deepseek-reasoner` (compat mode; DeepSeek-V3.2-Speciale alias supported)
   - `export AI_SCIENTIST_ENABLE=1`
   - (optional) native v2:
     - `export AI_SCIENTIST_MODEL=deepseek-coder-v2-0724`

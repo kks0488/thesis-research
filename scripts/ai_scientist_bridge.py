@@ -99,7 +99,7 @@ def main() -> int:
     workshop_file = Path(args.workshop_file).resolve()
     ensure_workshop(workshop_file)
 
-    model = (os.getenv("AI_SCIENTIST_MODEL") or "DeepSeek-V3.2-Speciale").strip()
+    model = (os.getenv("AI_SCIENTIST_MODEL") or "deepseek-reasoner").strip()
     native_ok = model == "deepseek-coder-v2-0724" and (os.getenv("AI_SCIENTIST_NATIVE") or "").strip() == "1"
     if native_ok:
         ai_home = Path(os.getenv("AI_SCIENTIST_HOME") or "").expanduser()
