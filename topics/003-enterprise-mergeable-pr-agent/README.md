@@ -7,6 +7,7 @@
 ## Objective (autopilot)
 
 - AI가 AI/LLM/소프트웨어공학 논문을 지속적으로 탐색하고, “머지 가능한 PR 비율”을 높이는 **다음 방향**을 제안한다.
+- LangGraph로 파이프라인을 오케스트레이션하고, AI-Scientist-v2로 아이디어 생성을 보조한다.
 
 ## Problem
 

@@ -41,6 +41,10 @@ OpenAlex/arXiv에서 자료를 가져오고, DeepSeek로 “토픽 브리프(읽
 
 AI/LLM/소프트웨어공학 논문을 자동 수집하고 “머지 가능한 PR 비율”을 올리는 다음 연구 방향을 요약합니다.
 
+사전 준비:
+
+- `python3 -m pip install -r requirements.txt` (LangGraph 포함)
+
 기본 동작:
 
 - `python3 scripts/autopilot.py` (기본 6시간 동안 주기적으로 업데이트)
@@ -49,3 +53,16 @@ AI/LLM/소프트웨어공학 논문을 자동 수집하고 “머지 가능한 P
 systemd 유저 타이머:
 
 - `bash scripts/install_autopilot_systemd_user.sh`
+
+### AI-Scientist-v2 연동(옵션)
+
+- 클론: `git clone https://github.com/SakanaAI/AI-Scientist-v2 third_party/AI-Scientist-v2`
+- 환경 변수:
+  - `export AI_SCIENTIST_HOME=/path/to/third_party/AI-Scientist-v2`
+  - `export AI_SCIENTIST_MODEL=deepseek-coder-v2-0724`
+  - `export AI_SCIENTIST_ENABLE=1`
+  - (선택) `export AI_SCIENTIST_PYTHON=/path/to/conda/env/bin/python`
+- 브리지 실행:
+  - `python3 scripts/ai_scientist_bridge.py --workshop-file ai_scientist_v2/mergeable_pr_agent.md`
+- autopilot과 함께:
+  - `python3 scripts/autopilot.py --enable-ai-scientist`

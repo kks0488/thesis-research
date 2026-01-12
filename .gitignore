@@ -20,3 +20,6 @@ paper/*.pdf
 
 topics/**/results/
 topics/**/research_runs/
+
+third_party/
+ai_scientist_v2/*.json

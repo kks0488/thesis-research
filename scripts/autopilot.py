@@ -7,15 +7,22 @@ import hashlib
 import json
 import os
 import random
+import subprocess
+import sys
 import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, TypedDict
 
 from deepseek_client import DeepSeekError, chat_completion, load_config_from_env
+
+try:
+    from langgraph.graph import END, StateGraph
+except ImportError as exc:  # pragma: no cover - dependency check
+    raise SystemExit("langgraph is required. Install with: pip install -r requirements.txt") from exc
 
 
 ATOM_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
@@ -75,6 +82,22 @@ class Paper:
 class PaperHit:
     query: str
     paper: Paper
+
+
+class AutoState(TypedDict, total=False):
+    queries: list[str]
+    retrieved_at: str
+    cycle: int
+    llm_calls: int
+    seen_keys: list[str]
+    all_hits: list[PaperHit]
+    fresh: list[PaperHit]
+    selected: list[PaperHit]
+    wrote: int
+    out_path: str
+    errors: list[str]
+    run_count: int
+    ai_scientist_ideas_path: str
 
 
 def paper_key(p: Paper) -> str:
@@ -234,6 +257,241 @@ def append_text(path: Path, line: str) -> None:
         f.write(line.rstrip() + "\n")
 
 
+def build_graph(*, root: Path, topic_dir: Path, errors_path: Path, args: argparse.Namespace) -> Any:
+    runs_dir = topic_dir / "research_runs"
+    ensure_dir(runs_dir)
+    library_path = root / "literature" / "library.jsonl"
+    state_path = root / "state" / "autopilot.json"
+
+    def collect(state: AutoState) -> dict[str, Any]:
+        retrieved_at = utc_now_iso()
+        errors = list(state.get("errors") or [])
+        hits: list[PaperHit] = []
+
+        for q in state.get("queries") or []:
+            try:
+                for p in search_openalex(
+                    query=q,
+                    pages=args.openalex_pages,
+                    per_page=args.openalex_per_page,
+                    email=args.email or None,
+                ):
+                    hits.append(PaperHit(query=q, paper=p))
+            except Exception as e:
+                msg = f"{retrieved_at} openalex error ({q}): {e}"
+                errors.append(msg)
+                append_text(errors_path, msg)
+            try:
+                for p in search_arxiv(query=q, max_results=args.arxiv_max):
+                    hits.append(PaperHit(query=q, paper=p))
+            except Exception as e:
+                msg = f"{retrieved_at} arxiv error ({q}): {e}"
+                errors.append(msg)
+                append_text(errors_path, msg)
+
+        return {"retrieved_at": retrieved_at, "all_hits": hits, "errors": errors}
+
+    def dedup(state: AutoState) -> dict[str, Any]:
+        seen = set(state.get("seen_keys") or [])
+        fresh: list[PaperHit] = []
+        for hit in state.get("all_hits") or []:
+            k = paper_key(hit.paper)
+            if k in seen:
+                continue
+            seen.add(k)
+            fresh.append(hit)
+
+        if args.max_new_records > 0:
+            fresh = fresh[: int(args.max_new_records)]
+
+        return {"fresh": fresh, "seen_keys": sorted(seen)[-20000:]}
+
+    def store(state: AutoState) -> dict[str, Any]:
+        fresh = state.get("fresh") or []
+        retrieved_at = state.get("retrieved_at") or utc_now_iso()
+        wrote = append_jsonl(
+            library_path,
+            [to_library_record(hit.paper, query=hit.query, retrieved_at=retrieved_at) for hit in fresh],
+        )
+        return {"wrote": wrote}
+
+    def select(state: AutoState) -> dict[str, Any]:
+        fresh = state.get("fresh") or []
+        selected = sorted(fresh, key=lambda h: rank(h.paper), reverse=True)[: max(1, int(args.top_n))]
+        return {"selected": selected}
+
+    def ai_scientist_ideas(state: AutoState) -> dict[str, Any]:
+        enabled = args.enable_ai_scientist or (os.getenv("AI_SCIENTIST_ENABLE") or "").strip() == "1"
+        if not enabled:
+            return {}
+
+        workshop_file = (root / args.ai_scientist_workshop).resolve()
+        if not workshop_file.exists():
+            msg = f"{utc_now_iso()} AI-Scientist-v2 workshop not found: {workshop_file}"
+            append_text(errors_path, msg)
+            return {}
+
+        ts = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+        out_path = runs_dir / f"{ts}-ai-scientist-ideas.json"
+        cmd = [
+            os.getenv("AI_SCIENTIST_PYTHON") or sys.executable,
+            str(root / "scripts" / "ai_scientist_bridge.py"),
+            "--workshop-file",
+            str(workshop_file),
+            "--max-ideas",
+            str(args.ai_scientist_max_ideas),
+            "--num-reflections",
+            str(args.ai_scientist_num_reflections),
+            "--out",
+            str(out_path),
+        ]
+        try:
+            subprocess.run(cmd, check=True)
+        except Exception as e:
+            msg = f"{utc_now_iso()} AI-Scientist-v2 run failed: {e}"
+            append_text(errors_path, msg)
+            return {}
+        return {"ai_scientist_ideas_path": str(out_path)}
+
+    def report(state: AutoState) -> dict[str, Any]:
+        selected = state.get("selected") or []
+        retrieved_at = state.get("retrieved_at") or utc_now_iso()
+        cycle = int(state.get("cycle") or 0)
+        llm_calls = int(state.get("llm_calls") or 0)
+        ts = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+        out_path = runs_dir / f"{ts}-autopilot.md"
+
+        if not selected:
+            msg = f"{retrieved_at} no new papers; cycle={cycle}"
+            append_text(errors_path, msg)
+            out_path.write_text(f"# Autopilot\n\n- retrieved_at: {retrieved_at}\n- cycle: {cycle}\n- note: no new papers\n", encoding="utf-8")
+            return {"out_path": str(out_path), "llm_calls": llm_calls}
+
+        fresh = state.get("fresh") or []
+        if args.no_llm or len(fresh) < int(args.min_new_for_llm) or llm_calls >= int(args.max_llm_calls):
+            lines = [
+                "# Autopilot (no-llm)",
+                "",
+                f"- retrieved_at: {retrieved_at}",
+                f"- cycle: {cycle}",
+                f"- new_records: {state.get('wrote')}",
+                "",
+                "## Top Papers",
+                "",
+            ]
+            for i, hit in enumerate(selected, start=1):
+                p = hit.paper
+                lines.append(f"{i}. {p.title} ({p.source})")
+                lines.append(f"   - query: {hit.query}")
+                if p.url:
+                    lines.append(f"   - {p.url}")
+                if p.doi:
+                    lines.append(f"   - {p.doi}")
+            out_path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+            return {"out_path": str(out_path), "llm_calls": llm_calls}
+
+        try:
+            cfg = load_config_from_env()
+        except DeepSeekError as e:
+            raise SystemExit(f"DeepSeek not configured: {e}") from e
+
+        items = []
+        for i, hit in enumerate(selected, start=1):
+            p = hit.paper
+            items.append(
+                {
+                    "n": i,
+                    "source": p.source,
+                    "query": hit.query,
+                    "title": p.title,
+                    "year": p.year,
+                    "venue": p.venue,
+                    "cited_by_count": p.cited_by_count,
+                    "authors": p.authors[:10],
+                    "url": p.url,
+                    "doi": p.doi,
+                    "abstract_or_summary": (p.abstract or p.summary or "")[:2200],
+                }
+            )
+
+        topic_readme = (topic_dir / "README.md").read_text(encoding="utf-8") if (topic_dir / "README.md").exists() else ""
+        ai_scientist_path = state.get("ai_scientist_ideas_path") or ""
+        ai_scientist_ideas = ""
+        if ai_scientist_path and Path(ai_scientist_path).exists():
+            ai_scientist_ideas = Path(ai_scientist_path).read_text(encoding="utf-8")
+        prompt = f"""
+You are an autonomous AI research team. Objective: read AI/LLM/software-engineering papers and propose a *next-step direction* that improves mergeable PR rate.
+Be conservative, reproducible, and cite only provided papers.
+
+Topic context:
+{topic_readme}
+
+AI-Scientist ideas (optional JSON):
+{ai_scientist_ideas}
+
+Candidate papers (JSON):
+{json.dumps(items, ensure_ascii=False, indent=2)}
+
+Tasks:
+1) Pick the top 8 papers and explain why (1-2 sentences each).
+2) Propose 3 pairings of papers (A+B) where combining them could improve mergeable PR rate.
+3) For the best pairing, propose a concrete method (system design + algorithmic idea).
+4) Propose a 3-day evaluation plan with metrics, baselines, and failure taxonomy.
+5) Output a Draft Abstract (150-220 words) for a tech report.
+6) Provide a "Next Step Direction" that goes one step beyond the papers (explicitly grounded in them).
+
+Hard rules:
+- Do NOT invent citations. Use ONLY the provided papers; cite by (title + url/doi).
+- If evidence is missing, say so and propose how to collect it.
+- If a paper is not AI/LLM/SE related, mark it as out-of-scope and do not use it for pairings.
+
+Output format: Markdown. Language: Korean (paper titles stay original).
+""".strip()
+
+        content = chat_completion(
+            [
+                {"role": "system", "content": "You are a rigorous research lead. Be explicit about uncertainty and do not hallucinate citations."},
+                {"role": "user", "content": prompt},
+            ],
+            config=cfg,
+            temperature=0.2,
+            max_tokens=1800,
+        )
+        out_path.write_text(content.strip() + "\n", encoding="utf-8")
+        return {"out_path": str(out_path), "llm_calls": llm_calls + 1}
+
+    def persist(state: AutoState) -> dict[str, Any]:
+        save_state(
+            state_path,
+            {
+                "seen_keys": state.get("seen_keys") or [],
+                "last_run_at": state.get("retrieved_at"),
+                "run_count": int(state.get("run_count") or 0),
+            },
+        )
+        return {}
+
+    builder = StateGraph(AutoState)
+    builder.add_node("collect", collect)
+    builder.add_node("dedup", dedup)
+    builder.add_node("store", store)
+    builder.add_node("select", select)
+    builder.add_node("ai_scientist_ideas", ai_scientist_ideas)
+    builder.add_node("report", report)
+    builder.add_node("persist", persist)
+
+    builder.add_edge("collect", "dedup")
+    builder.add_edge("dedup", "store")
+    builder.add_edge("store", "select")
+    builder.add_edge("select", "ai_scientist_ideas")
+    builder.add_edge("ai_scientist_ideas", "report")
+    builder.add_edge("report", "persist")
+    builder.add_edge("persist", END)
+
+    builder.set_entry_point("collect")
+    return builder.compile()
+
+
 def to_library_record(p: Paper, *, query: str, retrieved_at: str) -> dict[str, Any]:
     return {
         "source": p.source,
@@ -276,6 +534,14 @@ def main() -> int:
     parser.add_argument("--min-new-for-llm", type=int, default=3, help="Minimum new papers required to call LLM")
     parser.add_argument("--max-llm-calls", type=int, default=8, help="Max LLM calls per run")
     parser.add_argument("--max-new-records", type=int, default=300, help="Cap new records per cycle")
+    parser.add_argument("--enable-ai-scientist", action="store_true", help="Run AI-Scientist-v2 ideation step")
+    parser.add_argument(
+        "--ai-scientist-workshop",
+        default="ai_scientist_v2/mergeable_pr_agent.md",
+        help="Workshop markdown file for AI-Scientist-v2",
+    )
+    parser.add_argument("--ai-scientist-max-ideas", type=int, default=3)
+    parser.add_argument("--ai-scientist-num-reflections", type=int, default=2)
     parser.add_argument("--email", default="", help="Optional email for OpenAlex mailto param")
     parser.add_argument("--no-llm", action="store_true", help="Collect only (no DeepSeek call)")
     args = parser.parse_args()
@@ -292,9 +558,8 @@ def main() -> int:
     state = load_state(state_path)
     seen = set(state.get("seen_keys") or [])
 
-    runs_dir = topic_dir / "research_runs"
-    ensure_dir(runs_dir)
     errors_path = root / "state" / "autopilot_errors.log"
+    graph = build_graph(root=root, topic_dir=topic_dir, errors_path=errors_path, args=args)
 
     run_start = time.time()
     run_end = run_start + max(0.0, float(args.run_hours)) * 3600.0 if args.run_hours > 0 else None
@@ -303,135 +568,21 @@ def main() -> int:
 
     while True:
         cycle += 1
-        retrieved_at = utc_now_iso()
-        all_hits: list[PaperHit] = []
-
-        for q in queries:
-            try:
-                for p in search_openalex(query=q, pages=args.openalex_pages, per_page=args.openalex_per_page, email=args.email or None):
-                    all_hits.append(PaperHit(query=q, paper=p))
-            except Exception as e:
-                append_text(errors_path, f"{retrieved_at} openalex error ({q}): {e}")
-            try:
-                for p in search_arxiv(query=q, max_results=args.arxiv_max):
-                    all_hits.append(PaperHit(query=q, paper=p))
-            except Exception as e:
-                append_text(errors_path, f"{retrieved_at} arxiv error ({q}): {e}")
-
-        # Dedup + mark seen
-        fresh: list[PaperHit] = []
-        for hit in all_hits:
-            k = paper_key(hit.paper)
-            if k in seen:
-                continue
-            seen.add(k)
-            fresh.append(hit)
-
-        if args.max_new_records > 0:
-            fresh = fresh[: int(args.max_new_records)]
-
-        library_path = root / "literature" / "library.jsonl"
-        wrote = append_jsonl(
-            library_path,
-            [to_library_record(hit.paper, query=hit.query, retrieved_at=retrieved_at) for hit in fresh],
-        )
-
-        selected = sorted(fresh, key=lambda h: rank(h.paper), reverse=True)[: max(1, int(args.top_n))]
-        ts = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-        out_path = runs_dir / f"{ts}-autopilot.md"
-
-        if not selected:
-            append_text(errors_path, f"{retrieved_at} no new papers; cycle={cycle}")
-        elif args.no_llm or len(fresh) < int(args.min_new_for_llm) or llm_calls >= int(args.max_llm_calls):
-            lines = [
-                "# Autopilot (no-llm)",
-                "",
-                f"- retrieved_at: {retrieved_at}",
-                f"- cycle: {cycle}",
-                f"- new_records: {wrote}",
-                "",
-                "## Top Papers",
-                "",
-            ]
-            for i, hit in enumerate(selected, start=1):
-                p = hit.paper
-                lines.append(f"{i}. {p.title} ({p.source})")
-                lines.append(f"   - query: {hit.query}")
-                if p.url:
-                    lines.append(f"   - {p.url}")
-                if p.doi:
-                    lines.append(f"   - {p.doi}")
-            out_path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
-        else:
-            try:
-                cfg = load_config_from_env()
-            except DeepSeekError as e:
-                raise SystemExit(f"DeepSeek not configured: {e}") from e
-
-            items = []
-            for i, hit in enumerate(selected, start=1):
-                p = hit.paper
-                items.append(
-                    {
-                        "n": i,
-                        "source": p.source,
-                        "query": hit.query,
-                        "title": p.title,
-                        "year": p.year,
-                        "venue": p.venue,
-                        "cited_by_count": p.cited_by_count,
-                        "authors": p.authors[:10],
-                        "url": p.url,
-                        "doi": p.doi,
-                        "abstract_or_summary": (p.abstract or p.summary or "")[:2200],
-                    }
-                )
-
-            topic_readme = (topic_dir / "README.md").read_text(encoding="utf-8") if (topic_dir / "README.md").exists() else ""
-            prompt = f"""
-You are an autonomous AI research team. Objective: read AI/LLM/software-engineering papers and propose a *next-step direction* that improves mergeable PR rate.
-Be conservative, reproducible, and cite only provided papers.
-
-Topic context:
-{topic_readme}
-
-Candidate papers (JSON):
-{json.dumps(items, ensure_ascii=False, indent=2)}
-
-Tasks:
-1) Pick the top 8 papers and explain why (1-2 sentences each).
-2) Propose 3 pairings of papers (A+B) where combining them could improve mergeable PR rate.
-3) For the best pairing, propose a concrete method (system design + algorithmic idea).
-4) Propose a 3-day evaluation plan with metrics, baselines, and failure taxonomy.
-5) Output a Draft Abstract (150-220 words) for a tech report.
-6) Provide a "Next Step Direction" that goes one step beyond the papers (explicitly grounded in them).
-
-Hard rules:
-- Do NOT invent citations. Use ONLY the provided papers; cite by (title + url/doi).
-- If evidence is missing, say so and propose how to collect it.
-- If a paper is not AI/LLM/SE related, mark it as out-of-scope and do not use it for pairings.
-
-Output format: Markdown. Language: Korean (paper titles stay original).
-""".strip()
-
-            content = chat_completion(
-                [
-                    {"role": "system", "content": "You are a rigorous research lead. Be explicit about uncertainty and do not hallucinate citations."},
-                    {"role": "user", "content": prompt},
-                ],
-                config=cfg,
-                temperature=0.2,
-                max_tokens=1800,
-            )
-            out_path.write_text(content.strip() + "\n", encoding="utf-8")
-            llm_calls += 1
-
-        state["seen_keys"] = sorted(seen)[-20000:]
-        state["last_run_at"] = retrieved_at
         state["run_count"] = int(state.get("run_count") or 0) + 1
-        save_state(state_path, state)
+        graph_state: AutoState = {
+            "queries": queries,
+            "cycle": cycle,
+            "llm_calls": llm_calls,
+            "seen_keys": state.get("seen_keys") or [],
+            "run_count": state.get("run_count"),
+        }
+        result = graph.invoke(graph_state)
+        llm_calls = int(result.get("llm_calls") or llm_calls)
+        state["seen_keys"] = result.get("seen_keys") or state.get("seen_keys") or []
 
-        print(out_path)
+        out_path = result.get("out_path")
+        if out_path:
+            print(out_path)
 
         if args.run_hours <= 0:
             break
