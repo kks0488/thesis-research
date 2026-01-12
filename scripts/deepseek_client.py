@@ -6,6 +6,7 @@ import os
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -36,7 +37,38 @@ def normalize_model(model: str) -> str:
     return MODEL_ALIASES.get(raw.lower(), raw)
 
 
+def _load_env_file(path: Path) -> None:
+    for line in path.read_text(encoding="utf-8").splitlines():
+        raw = line.strip()
+        if not raw or raw.startswith("#") or "=" not in raw:
+            continue
+        if raw.startswith("export "):
+            raw = raw[len("export ") :].strip()
+        key, value = raw.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key or key in os.environ:
+            continue
+        if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+            value = value[1:-1]
+        os.environ[key] = value
+
+
+def load_dotenv() -> Path | None:
+    cwd = Path.cwd()
+    loaded: Path | None = None
+    for root in [cwd, *cwd.parents]:
+        for name in (".env.local", ".env"):
+            candidate = root / name
+            if candidate.is_file():
+                _load_env_file(candidate)
+                if loaded is None:
+                    loaded = candidate
+    return loaded
+
+
 def load_config_from_env() -> DeepSeekConfig:
+    load_dotenv()
     api_key = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
     if not api_key:
         raise DeepSeekError("Missing DEEPSEEK_API_KEY env var.")

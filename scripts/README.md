@@ -32,6 +32,7 @@ Prereqs:
 
 - set `DEEPSEEK_API_KEY`
 - default model is `DEEPSEEK_MODEL=deepseek-reasoner` (DeepSeek-V3.2-Speciale alias supported)
+- scripts auto-load `.env` or `.env.local` from the repo root if present
 
 Example:
 

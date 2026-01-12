@@ -93,14 +93,16 @@ def main() -> int:
     parser.add_argument("--out", default="", help="Optional output JSON path for ideas")
     args = parser.parse_args()
 
-    if not os.getenv("DEEPSEEK_API_KEY"):
-        raise SystemExit("DEEPSEEK_API_KEY must be set for AI-Scientist ideation.")
-
     workshop_file = Path(args.workshop_file).resolve()
     ensure_workshop(workshop_file)
 
     model = (os.getenv("AI_SCIENTIST_MODEL") or "deepseek-reasoner").strip()
     native_ok = model == "deepseek-coder-v2-0724" and (os.getenv("AI_SCIENTIST_NATIVE") or "").strip() == "1"
+    if not native_ok:
+        try:
+            load_config_from_env()
+        except DeepSeekError as e:
+            raise SystemExit(f"DeepSeek not configured: {e}") from e
     if native_ok:
         ai_home = Path(os.getenv("AI_SCIENTIST_HOME") or "").expanduser()
         if not ai_home.exists():

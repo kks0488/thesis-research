@@ -14,9 +14,10 @@ Workspace to operate AI as a research team. "Future revenue" here means economic
 - Install deps:
   - `python3 -m pip install -r requirements.txt`
 - Configure DeepSeek (keep keys out of files; env vars only):
-  - `cp .env.example .env` then fill in `DEEPSEEK_API_KEY` only (`.env` is gitignored)
+  - `cp .env.example .env` (or `.env.local`) then fill in `DEEPSEEK_API_KEY` only (both are gitignored)
   - if a key is exposed, rotate it immediately
   - DeepSeek API is fixed (no other LLMs)
+  - scripts will auto-load `.env` or `.env.local` from the repo root if present
 - Create a new topic: `python3 scripts/new_topic.py "Future revenue: precision fermentation protein"`
 - Paper search (metadata):
   - OpenAlex: `python3 scripts/openalex_search.py --query "precision fermentation protein" --per-page 25 --pages 2`
