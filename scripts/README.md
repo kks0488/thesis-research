@@ -36,3 +36,16 @@ OpenAlex/arXiv에서 자료를 가져오고, DeepSeek로 “토픽 브리프(읽
 예:
 
 - `python3 scripts/research_pipeline.py --topic topics/001-미래먹거리정밀발효기반단백질 --query "precision fermentation protein"`
+
+## autopilot.py
+
+AI/LLM/소프트웨어공학 논문을 자동 수집하고 “머지 가능한 PR 비율”을 올리는 다음 연구 방향을 요약합니다.
+
+기본 동작:
+
+- `python3 scripts/autopilot.py` (기본 6시간 동안 주기적으로 업데이트)
+- 1회 실행만: `python3 scripts/autopilot.py --run-hours 0`
+
+systemd 유저 타이머:
+
+- `bash scripts/install_autopilot_systemd_user.sh`

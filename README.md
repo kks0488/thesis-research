@@ -13,6 +13,7 @@ AI를 “연구팀”처럼 운영하기 위한 작업공간입니다. 여기서
 - DeepSeek 설정(키는 파일에 저장하지 말고 환경변수로만):
   - `cp .env.example .env` 후 `DEEPSEEK_API_KEY`만 채우기 (이 repo는 `.env`를 gitignore 함)
   - 키를 채팅/문서에 노출했다면 즉시 재발급(rotate) 권장
+  - DeepSeek API는 고정(다른 LLM으로 교체하지 않음)
 - 새 연구 토픽 만들기: `python3 scripts/new_topic.py "미래먹거리: 정밀발효 기반 단백질"`
 - 논문 검색(메타데이터 수집):
   - OpenAlex: `python3 scripts/openalex_search.py --query "precision fermentation protein" --per-page 25 --pages 2`
@@ -23,6 +24,9 @@ AI를 “연구팀”처럼 운영하기 위한 작업공간입니다. 여기서
   - 1) `.env` 준비: `cp .env.example .env` 후 `DEEPSEEK_API_KEY` 설정
   - 2) 설치/시작: `bash scripts/install_autopilot_systemd_user.sh`
   - 3) 상태 확인: `systemctl --user status thesis-research-autopilot.timer`
+- 단일 실행(기본 6시간 러닝):
+  - `python3 scripts/autopilot.py` (기본 6시간 동안 주기적으로 업데이트)
+  - 1회 실행만 원하면: `python3 scripts/autopilot.py --run-hours 0`
 - 논문 요약 템플릿: `templates/paper_summary.md`
 - 논문(LaTeX) 빌드(선택): `cd paper && make` (로컬에 `latexmk`/LaTeX 필요)
 

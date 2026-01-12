@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 .env
 .env.*
+!.env.example
 state/
 
 literature/*.csv
@@ -18,3 +19,4 @@ paper/*.out
 paper/*.pdf
 
 topics/**/results/
+topics/**/research_runs/

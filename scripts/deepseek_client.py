@@ -29,8 +29,17 @@ def load_config_from_env() -> DeepSeekConfig:
         raise DeepSeekError("Missing DEEPSEEK_API_KEY env var.")
 
     model = (os.getenv("DEEPSEEK_MODEL") or "DeepSeek-V3.2-Speciale").strip()
-    base_url = (os.getenv("DEEPSEEK_BASE_URL") or "https://api.deepseek.com").strip().rstrip("/")
-    api_path = (os.getenv("DEEPSEEK_API_PATH") or "/chat/completions").strip()
+    allow_override = (os.getenv("DEEPSEEK_ALLOW_OVERRIDE") or "").strip() == "1"
+
+    base_url = "https://api.deepseek.com"
+    api_path = "/chat/completions"
+    if allow_override:
+        base_url = (os.getenv("DEEPSEEK_BASE_URL") or base_url).strip().rstrip("/")
+        api_path = (os.getenv("DEEPSEEK_API_PATH") or api_path).strip()
+
+    if "deepseek" not in base_url:
+        raise DeepSeekError("DeepSeek API is required (base_url must be DeepSeek).")
+
     if not api_path.startswith("/"):
         api_path = "/" + api_path
     return DeepSeekConfig(api_key=api_key, model=model, base_url=base_url, api_path=api_path)

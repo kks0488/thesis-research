@@ -17,7 +17,7 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=${REPO_ROOT}
 EnvironmentFile=${REPO_ROOT}/.env
-ExecStart=/usr/bin/env python3 ${REPO_ROOT}/scripts/autopilot.py
+ExecStart=/usr/bin/env python3 ${REPO_ROOT}/scripts/autopilot.py --run-hours 6 --cycle-sleep-mins 30
 Nice=10
 EOF
 
@@ -39,4 +39,3 @@ systemctl --user enable --now "${UNIT_NAME}.timer"
 
 echo "Installed and started: ${UNIT_NAME}.timer"
 echo "Status: systemctl --user status ${UNIT_NAME}.timer"
-
